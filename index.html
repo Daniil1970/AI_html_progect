@@ -746,8 +746,11 @@
 // ===== CONFIG =====
 const ACCESS_CODE = "1971";
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const API_KEY = "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"; // <-- ЗАМЕНИТЕ НА СВОЙ КЛЮЧ
+let API_KEY = localStorage.getItem('openrouter_api_key') || '';
 const MODEL = "google/gemma-3-12b-it:free";
+const FALLBACK_MODEL = "openrouter/free";
+const REQUEST_TIMEOUT_MS = 30000;
+const RETRY_DELAYS_MS = [1500, 3500];
 
 const INITIAL_AI_MSG = `Инициализация завершена. Темпоральный переход успешен.
 
@@ -885,6 +888,76 @@ function removeTyping() {
   if (t) t.remove();
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function safeReadJson(response) {
+  try {
+    return await response.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+function getRefererForOpenRouter() {
+  return window.location.origin + window.location.pathname;
+}
+
+function ensureApiKey() {
+  if (API_KEY) return true;
+  const typedKey = window.prompt('Введите OpenRouter API key (начинается с sk-or-v1-):', '');
+  if (!typedKey) return false;
+  API_KEY = typedKey.trim();
+  if (!API_KEY) return false;
+  localStorage.setItem('openrouter_api_key', API_KEY);
+  return true;
+}
+
+function mapApiErrorToUserText(status, message) {
+  if (status === 401) {
+    return 'Ключ доступа отклонен (401). Проверьте API key в OpenRouter.';
+  }
+  if (status === 402) {
+    return 'Лимит аккаунта исчерпан (402). Проверьте кредиты и баланс.';
+  }
+  if (status === 429) {
+    return 'Слишком много запросов (429). Подождите немного и повторите.';
+  }
+  if (status === 503) {
+    return 'Модель временно недоступна (503). Повторите через несколько секунд.';
+  }
+  if (message) {
+    return `Ошибка канала: ${message}`;
+  }
+  return `Ошибка канала связи (${status}).`;
+}
+
+async function fetchOpenRouter(messages, model) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + API_KEY,
+        'HTTP-Referer': getRefererForOpenRouter(),
+        'X-OpenRouter-Title': 'CHRONOS-7'
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        max_tokens: 400,
+        temperature: 0.8
+      })
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ===== SEND =====
 async function sendMessage() {
   if (isSending || !isAlive || questionsLeft <= 0) return;
@@ -892,6 +965,10 @@ async function sendMessage() {
   const input = document.getElementById('userInput');
   const text = input.value.trim();
   if (!text) return;
+  if (!ensureApiKey()) {
+    addMessage('ai', 'Ключ OpenRouter не указан. Без него канал связи не откроется.');
+    return;
+  }
 
   input.value = '';
   input.style.height = 'auto';
@@ -901,52 +978,64 @@ async function sendMessage() {
   addMessage('user', text);
   conversationHistory.push({ role: 'user', content: text });
 
-  questionsLeft--;
-  updateEnergy();
-  updateSlots();
-  updateHint();
-
   showTyping();
 
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + API_KEY,
-        'HTTP-Referer': 'https://chronos7.local',
-        'X-Title': 'CHRONOS-7'
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: systemPromptText },
-          ...conversationHistory
-        ],
-        max_tokens: 400,
-        temperature: 0.8
-      })
-    });
+    const messages = [
+      { role: 'system', content: systemPromptText },
+      ...conversationHistory
+    ];
 
-    if (!response.ok) {
-         throw new Error("API error: " + response.status);
+    let response = null;
+    let data = null;
+    let status = 0;
+    let apiMessage = '';
+    let usedModel = MODEL;
+
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      response = await fetchOpenRouter(messages, usedModel);
+      status = response.status;
+      data = await safeReadJson(response);
+      apiMessage = data && data.error && data.error.message ? data.error.message : '';
+
+      if (response.ok) break;
+
+      if (status === 429 && attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        if (attempt === 0) {
+          usedModel = FALLBACK_MODEL;
+        }
+        continue;
+      }
+      break;
     }
 
-    const data = await response.json();
+    if (!response || !response.ok) {
+      throw new Error(mapApiErrorToUserText(status, apiMessage));
+    }
+
     removeTyping();
 
     let reply = 'Сигнал потерян. Повторите попытку.';
-    if (data.choices && data.choices[0] && data.choices[0].message) {
+    if (data && data.choices && data.choices[0] && data.choices[0].message) {
       reply = data.choices[0].message.content;
       conversationHistory.push({ role: 'assistant', content: reply });
     }
+
+    questionsLeft--;
+    updateEnergy();
+    updateSlots();
+    updateHint();
 
     addMessage('ai', reply);
 
   } catch (err) {
     removeTyping();
-    addMessage('ai', 'Ошибка канала связи. Временной туннель нестабилен.');
-    conversationHistory.push({ role: 'assistant', content: 'Ошибка канала связи.' });
+    const errorText = err && err.name === 'AbortError'
+      ? 'Туннель перегружен: время ожидания истекло. Повторите запрос.'
+      : (err && err.message ? err.message : 'Ошибка канала связи. Временной туннель нестабилен.');
+    addMessage('ai', errorText);
+    conversationHistory.push({ role: 'assistant', content: errorText });
   }
 
   isSending = false;
