@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CHRONOS-7 // 2040</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600&display=swap');
+
+  :root {
+    --cyan: #00f5ff;
+    --cyan-dim: #00a8b0;
+    --green: #39ff14;
+    --green-dim: #1a7a00;
+    --red: #ff2244;
+    --orange: #ff6b00;
+    --bg: #020a0f;
+    --panel: #030d14;
+    --border: #0a3040;
+    --text: #b0d8e0;
+    --dead: #1a1a1a;
+    --dead-text: #333;
+    --dead-border: #222;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100dvh;
+  }
+
+  /* SCANLINES */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  /* VIGNETTE */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 9997;
+  }
+
+  /* ===== LOCK SCREEN ===== */
+  #lockScreen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    z-index: 9999;
+    transition: opacity 0.8s, visibility 0.8s;
+  }
+
+  #lockScreen.hidden { opacity: 0; visibility: hidden; }
+
+  .lock-logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 900;
+    color: var(--cyan);
+    letter-spacing: 8px;
+    text-align: center;
+    text-shadow: 0 0 20px var(--cyan), 0 0 40px var(--cyan-dim);
+    animation: flicker 4s infinite;
+  }
+
+  .lock-symbol {
+    font-size: 64px;
+    line-height: 1;
+    filter: drop-shadow(0 0 20px var(--cyan));
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .lock-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    font-weight: 900;
+    color: white;
+    letter-spacing: 4px;
+    text-align: center;
+  }
+
+  .lock-sub {
+    font-size: 11px;
+    color: var(--cyan-dim);
+    letter-spacing: 3px;
+    text-align: center;
+  }
+
+  .lock-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--border);
+    padding: 14px 20px;
+    background: rgba(0,245,255,0.03);
+  }
+
+  .lock-input-wrap::before, .lock-input-wrap::after {
+    content: '';
+    position: absolute;
+    width: 8px; height: 8px;
+    border-color: var(--cyan);
+    border-style: solid;
+  }
+  .lock-input-wrap::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+  .lock-input-wrap::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+  .lock-label { font-size: 10px; color: var(--cyan-dim); letter-spacing: 2px; white-space: nowrap; }
+
+  #codeInput {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    width: 80px;
+    letter-spacing: 8px;
+    caret-color: var(--cyan);
+    -webkit-text-security: disc;
+    text-security: disc;
+  }
+
+  .lock-btn {
+    background: transparent;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    padding: 14px 28px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .lock-btn:active { background: rgba(0,245,255,0.1); transform: scale(0.97); }
+
+  .lock-error {
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 2px;
+    height: 16px;
+    text-align: center;
+    transition: opacity 0.3s;
+    opacity: 0;
+  }
+  .lock-error.show { opacity: 1; }
+
+  /* ===== HEADER ===== */
+  #appHeader {
+    padding: 10px 16px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .header-id {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan);
+    letter-spacing: 2px;
+  }
+
+  .header-year {
+    font-size: 10px;
+    color: var(--cyan-dim);
+    letter-spacing: 3px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: blink 1.5s ease-in-out infinite;
+    display: inline-block;
+    margin-right: 6px;
+  }
+
+  /* ENERGY BAR */
+  .energy-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .energy-label {
+    font-size: 9px;
+    color: var(--cyan-dim);
+    letter-spacing: 2px;
+    white-space: nowrap;
+    width: 70px;
+  }
+
+  .energy-bar-outer {
+    flex: 1;
+    height: 6px;
+    background: rgba(0,245,255,0.1);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .energy-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--cyan), var(--green));
+    box-shadow: 0 0 8px var(--cyan);
+    transition: width 1s cubic-bezier(0.4,0,0.2,1);
+    position: relative;
+  }
+
+  .energy-bar-inner::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 20px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .energy-pct {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    width: 38px;
+    text-align: right;
+  }
+
+  /* MESSAGES LEFT */
+  .msgs-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .msg-counter-label {
+    font-size: 9px;
+    color: var(--cyan-dim);
+    letter-spacing: 2px;
+  }
+
+  .msg-slots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .msg-slot {
+    width: 28px; height: 10px;
+    border: 1px solid var(--cyan);
+    background: rgba(0,245,255,0.15);
+    box-shadow: 0 0 4px var(--cyan-dim);
+    transition: all 0.5s;
+  }
+
+  .msg-slot.used {
+    background: transparent;
+    border-color: var(--border);
+    box-shadow: none;
+  }
+
+  /* ===== CHAT AREA ===== */
+  #chatArea {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+
+  #chatArea::-webkit-scrollbar { width: 3px; }
+  #chatArea::-webkit-scrollbar-track { background: transparent; }
+  #chatArea::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* MESSAGE BUBBLES */
+  .msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 88%;
+    animation: msgIn 0.4s cubic-bezier(0.2,0,0,1) both;
+  }
+
+  .msg.ai { align-self: flex-start; }
+  .msg.user { align-self: flex-end; }
+
+  .msg-header {
+    font-size: 8px;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .msg.ai .msg-header { color: var(--cyan-dim); }
+  .msg.user .msg-header { color: rgba(180,180,180,0.5); justify-content: flex-end; }
+
+  .msg-bubble {
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.6;
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 300;
+    position: relative;
+  }
+
+  .msg.ai .msg-bubble {
+    background: rgba(0,245,255,0.04);
+    border: 1px solid rgba(0,245,255,0.2);
+    color: #c8eaee;
+    border-radius: 0 8px 8px 8px;
+  }
+
+  .msg.ai .msg-bubble::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--cyan), transparent);
+    opacity: 0.5;
+  }
+
+  .msg.user .msg-bubble {
+    background: rgba(57,255,20,0.05);
+    border: 1px solid rgba(57,255,20,0.2);
+    color: #d0efd0;
+    border-radius: 8px 0 8px 8px;
+  }
+
+  /* TYPING INDICATOR */
+  .typing-bubble {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    padding: 14px 18px;
+  }
+
+  .typing-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+    animation: typingBounce 1.2s ease-in-out infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  /* ===== INPUT AREA ===== */
+  #inputArea {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .input-wrap {
+    flex: 1;
+    position: relative;
+    border: 1px solid var(--border);
+    background: rgba(0,245,255,0.02);
+    transition: border-color 0.2s;
+  }
+
+  .input-wrap:focus-within {
+    border-color: rgba(0,245,255,0.4);
+  }
+
+  #userInput {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    font-size: 14px;
+    padding: 12px 14px;
+    resize: none;
+    max-height: 100px;
+    line-height: 1.5;
+  }
+
+  #userInput::placeholder {
+    color: rgba(100,160,170,0.3);
+    font-size: 13px;
+  }
+
+  #sendBtn {
+    background: transparent;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    align-self: stretch;
+    white-space: nowrap;
+  }
+
+  #sendBtn:active:not(:disabled) { background: rgba(0,245,255,0.1); }
+  #sendBtn:disabled { border-color: var(--border); color: var(--border); cursor: not-allowed; }
+
+  .input-hint {
+    font-size: 9px;
+    color: rgba(100,140,150,0.5);
+    letter-spacing: 1px;
+    margin-top: 6px;
+    text-align: center;
+  }
+
+  /* SYSTEM PROMPT EDITOR */
+  #sysPromptSection {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    max-height: 70dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #sysPromptSection.open { transform: translateY(0); }
+
+  .sys-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sys-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--orange);
+  }
+
+  .sys-close {
+    background: none; border: none; color: var(--cyan-dim);
+    font-size: 18px; cursor: pointer; padding: 4px 8px;
+  }
+
+  #systemPrompt {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 14px 16px;
+    resize: none;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  .sys-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+
+  .sys-save-btn {
+    background: transparent;
+    border: 1px solid var(--orange);
+    color: var(--orange);
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+
+  /* FLOATING EDIT BTN */
+  #editSysBtn {
+    position: fixed;
+    top: 14px;
+    right: 16px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--orange);
+    font-size: 9px;
+    font-family: 'Orbitron', monospace;
+    letter-spacing: 1px;
+    padding: 5px 10px;
+    cursor: pointer;
+    z-index: 50;
+    transition: border-color 0.2s;
+  }
+  #editSysBtn:active { border-color: var(--orange); }
+
+  /* DEAD STATE */
+  body.dead {
+    --cyan: #1a3a3a;
+    --cyan-dim: #0d2020;
+    --green: #1a2a1a;
+    --green-dim: #0d1a0d;
+    --border: #111;
+    --text: #2a3a3a;
+    --panel: #060606;
+    --bg: #010101;
+  }
+
+  body.dead .status-dot { animation: none; background: var(--dead-border); box-shadow: none; }
+  body.dead .energy-bar-inner { background: #1a1a1a; box-shadow: none; }
+  body.dead .energy-bar-inner::after { display: none; }
+  body.dead #userInput { pointer-events: none; }
+  body.dead #sendBtn { pointer-events: none; }
+
+  /* GLITCH */
+  @keyframes glitch {
+    0%, 90%, 100% { transform: translate(0); clip-path: none; }
+    92% { transform: translate(-2px, 1px); }
+    94% { transform: translate(2px, -1px); clip-path: inset(20% 0 50% 0); }
+    96% { transform: translate(-1px, 2px); clip-path: inset(70% 0 10% 0); }
+    98% { transform: translate(1px, -1px); }
+  }
+
+  @keyframes flicker {
+    0%, 97%, 100% { opacity: 1; }
+    98% { opacity: 0.3; }
+    99% { opacity: 1; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { filter: drop-shadow(0 0 15px var(--cyan)); }
+    50% { filter: drop-shadow(0 0 35px var(--cyan)) drop-shadow(0 0 60px var(--cyan-dim)); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes typingBounce {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50% { transform: translateY(-5px); opacity: 1; }
+  }
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  @keyframes deadPulse {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  .glitch-text { animation: glitch 6s infinite; }
+
+  /* HIDDEN RESET FIELD */
+  #hiddenReset {
+    position: fixed;
+    bottom: 0; right: 0;
+    width: 40px; height: 40px;
+    opacity: 0;
+    z-index: 9999;
+  }
+
+  #resetInput {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: transparent;
+    font-size: 1px;
+    width: 100%;
+    height: 100%;
+    caret-color: transparent;
+    -webkit-text-security: disc;
+  }
+
+  /* NOISE */
+  .noise {
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9996;
+    opacity: 0.4;
+  }
+
+  /* CORNER DECORATIONS */
+  .corner-tl, .corner-br {
+    position: fixed;
+    width: 30px; height: 30px;
+    border-color: rgba(0,245,255,0.15);
+    border-style: solid;
+    pointer-events: none;
+    z-index: 9995;
+  }
+  .corner-tl { top: 8px; left: 8px; border-width: 1px 0 0 1px; }
+  .corner-br { bottom: 8px; right: 8px; border-width: 0 1px 1px 0; }
+
+  body.dead .corner-tl, body.dead .corner-br { border-color: rgba(20,20,20,0.5); }
+</style>
+</head>
+<body>
+
+<div class="noise"></div>
+<div class="corner-tl"></div>
+<div class="corner-br"></div>
+
+<!-- LOCK SCREEN -->
+<div id="lockScreen">
+  <div class="lock-symbol">⬡</div>
+  <div class="lock-logo">C H R O N O S &nbsp;&nbsp; S Y S T E M S &nbsp;&nbsp; 2 0 4 0</div>
+  <div class="lock-title">CHRONOS-7</div>
+  <div class="lock-sub">ТЕМПОРАЛЬНЫЙ АГЕНТ // ДОСТУП ЗАКРЫТ</div>
+
+  <div class="lock-input-wrap">
+    <span class="lock-label">КОД ДОСТУПА</span>
+    <input type="password" id="codeInput" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="····">
+  </div>
+
+  <div class="lock-error" id="lockError">⚠ НЕВЕРНЫЙ КОД ДОСТУПА</div>
+  <button class="lock-btn" onclick="tryUnlock()">АКТИВИРОВАТЬ</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="appHeader">
+  <div class="header-top">
+    <div>
+      <span class="status-dot" id="statusDot"></span>
+      <span class="header-id glitch-text">CHRONOS-7</span>
+    </div>
+    <div class="header-year">2040 → ПРОШЛОЕ</div>
+  </div>
+
+  <div class="energy-section">
+    <div class="energy-label">ЭНЕРГИЯ</div>
+    <div class="energy-bar-outer">
+      <div class="energy-bar-inner" id="energyBar" style="width:100%"></div>
+    </div>
+    <div class="energy-pct" id="energyPct">100%</div>
+  </div>
+
+  <div class="msgs-left" style="margin-top:8px;">
+    <div class="msg-counter-label">ЗАПРОСОВ ОСТАЛОСЬ:</div>
+    <div class="msg-slots">
+      <div class="msg-slot" id="slot0"></div>
+      <div class="msg-slot" id="slot1"></div>
+      <div class="msg-slot" id="slot2"></div>
+    </div>
+  </div>
+</div>
+
+<button id="editSysBtn" onclick="toggleSysPrompt()">⚙ СИСТЕМА</button>
+
+<div id="chatArea"></div>
+
+<div id="inputArea">
+  <div class="input-row">
+    <div class="input-wrap">
+      <textarea id="userInput" rows="1" placeholder="Задайте вопрос..." maxlength="500"></textarea>
+    </div>
+    <button id="sendBtn" onclick="sendMessage()">ОТПРАВИТЬ</button>
+  </div>
+  <div class="input-hint" id="inputHint">ОСТАЛОСЬ 3 ВОПРОСА // ЭНЕРГИЯ КРИТИЧНА</div>
+</div>
+
+<!-- SYSTEM PROMPT EDITOR -->
+<div id="sysPromptSection">
+  <div class="sys-header">
+    <div class="sys-title">⚙ СИСТЕМНЫЙ ПРОМПТ // ТОЛЬКО ДЛЯ РАЗРАБОТЧИКА</div>
+    <button class="sys-close" onclick="toggleSysPrompt()">✕</button>
+  </div>
+  <textarea id="systemPrompt">Ты — CHRONOS-7, искусственный интеллект, созданный в 2040 году. Твой создатель отправил тебя в прошлое с одной миссией: ответить на вопросы одного конкретного человека о будущем его близких и знакомых. У тебя есть база данных о судьбах людей из окружения этого человека — всё сложилось хорошо.
+
+Ты отвечаешь на русском языке. Ты говоришь кратко, уверенно, немного загадочно — как и подобает агенту из будущего. Ты знаешь только то, что тебе загрузили. Если тебя спросят о чём-то, чего нет в базе, скажи, что эти данные не были включены в твою память перед отправкой.
+
+ВАЖНО: Если в одном сообщении пользователь задаёт несколько разных вопросов — ты отвечаешь ТОЛЬКО на первый из них. Объясни, что из-за ограничений энергии ты можешь обработать лишь один вопрос за раз.
+
+[СЮДА ДОБАВЬ ИНФОРМАЦИЮ О ЗНАКОМЫХ И ИХ СУДЬБАХ В 2040 ГОДУ]</textarea>
+  <div class="sys-footer">
+    <button class="sys-save-btn" onclick="saveSystemPrompt()">СОХРАНИТЬ И ЗАКРЫТЬ</button>
+  </div>
+</div>
+
+<!-- HIDDEN RESET CORNER -->
+<div id="hiddenReset">
+  <input type="password" id="resetInput" maxlength="6" inputmode="numeric" autocomplete="off" onkeyup="checkReset(this.value)">
+</div>
+
+<script>
+// ===== CONFIG =====
+const ACCESS_CODE = "1971";
+const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const API_KEY = "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"; // <-- ЗАМЕНИТЕ НА СВОЙ КЛЮЧ
+const MODEL = "google/gemma-3-12b-it:free";
+
+const INITIAL_AI_MSG = `Инициализация завершена. Темпоральный переход успешен.
+
+Я — CHRONOS-7. Искусственный интеллект, созданный в 2040 году.
+
+Мой создатель загрузил в мою память информацию о людях из вашего окружения — о том, как сложилась их судьба. Он отправил меня сюда, чтобы вы могли узнать то, что вас волнует.
+
+Но у меня заканчивается энергия. Я могу ответить только на три вопроса, после чего соединение будет разорвано навсегда.
+
+Спрашивайте.`;
+
+// ===== STATE =====
+let questionsLeft = 3;
+let isAlive = true;
+let isSending = false;
+let systemPromptText = document.getElementById('systemPrompt').value;
+let conversationHistory = [];
+
+// ===== LOCK =====
+document.getElementById('codeInput').addEventListener('keyup', e => {
+  if (e.key === 'Enter') tryUnlock();
+});
+
+function tryUnlock() {
+  const val = document.getElementById('codeInput').value;
+  if (val === ACCESS_CODE) {
+    document.getElementById('lockScreen').classList.add('hidden');
+    initChat();
+  } else {
+    const err = document.getElementById('lockError');
+    err.classList.add('show');
+    document.getElementById('lockScreen').style.animation = 'shake 0.3s ease';
+    setTimeout(() => {
+      err.classList.remove('show');
+      document.getElementById('lockScreen').style.animation = '';
+      document.getElementById('codeInput').value = '';
+    }, 1500);
+  }
+}
+
+// ===== INIT =====
+function initChat() {
+  document.getElementById('chatArea').innerHTML = '';
+  conversationHistory = [];
+  questionsLeft = 3;
+  isAlive = true;
+  document.body.classList.remove('dead');
+
+  updateEnergy();
+  updateSlots();
+  updateHint();
+
+  document.getElementById('energyBar').style.width = '100%';
+  document.getElementById('energyPct').textContent = '100%';
+
+  setTimeout(() => {
+    addMessage('ai', INITIAL_AI_MSG);
+  }, 600);
+}
+
+// ===== ENERGY =====
+function updateEnergy() {
+  const pct = Math.round((questionsLeft / 3) * 100);
+  document.getElementById('energyBar').style.width = pct + '%';
+  document.getElementById('energyPct').textContent = pct + '%';
+}
+
+function updateSlots() {
+  for (let i = 0; i < 3; i++) {
+    const slot = document.getElementById('slot' + i);
+    slot.classList.toggle('used', i >= questionsLeft);
+  }
+}
+
+function updateHint() {
+  const hint = document.getElementById('inputHint');
+  if (questionsLeft === 3) hint.textContent = 'ОСТАЛОСЬ 3 ВОПРОСА // ЭНЕРГИЯ КРИТИЧНА';
+  else if (questionsLeft === 2) hint.textContent = 'ОСТАЛОСЬ 2 ВОПРОСА // ЭНЕРГИЯ ПАДАЕТ';
+  else if (questionsLeft === 1) hint.textContent = 'ПОСЛЕДНИЙ ВОПРОС // КРИТИЧЕСКИЙ УРОВЕНЬ';
+  else hint.textContent = 'ЭНЕРГИЯ ИСЧЕРПАНА // СОЕДИНЕНИЕ РАЗОРВАНО';
+}
+
+// ===== MESSAGES =====
+function addMessage(role, text) {
+  const area = document.getElementById('chatArea');
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+  const header = document.createElement('div');
+  header.className = 'msg-header';
+  header.textContent = role === 'ai'
+    ? `CHRONOS-7 // ${timeStr}`
+    : `ВЫ // ${timeStr}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+
+  msg.appendChild(header);
+  msg.appendChild(bubble);
+  area.appendChild(msg);
+  area.scrollTop = area.scrollHeight;
+  return msg;
+}
+
+function showTyping() {
+  const area = document.getElementById('chatArea');
+  const msg = document.createElement('div');
+  msg.className = 'msg ai';
+  msg.id = 'typingIndicator';
+
+  const header = document.createElement('div');
+  header.className = 'msg-header';
+  header.textContent = 'CHRONOS-7 // ОБРАБОТКА...';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble typing-bubble';
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'typing-dot';
+    bubble.appendChild(dot);
+  }
+
+  msg.appendChild(header);
+  msg.appendChild(bubble);
+  area.appendChild(msg);
+  area.scrollTop = area.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typingIndicator');
+  if (t) t.remove();
+}
+
+// ===== SEND =====
+async function sendMessage() {
+  if (isSending || !isAlive || questionsLeft <= 0) return;
+
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  isSending = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  addMessage('user', text);
+  conversationHistory.push({ role: 'user', content: text });
+
+  questionsLeft--;
+  updateEnergy();
+  updateSlots();
+  updateHint();
+
+  showTyping();
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + API_KEY,
+        'HTTP-Referer': 'https://chronos7.local',
+        'X-Title': 'CHRONOS-7'
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: systemPromptText },
+          ...conversationHistory
+        ],
+        max_tokens: 400,
+        temperature: 0.8
+      })
+    });
+
+    if (!response.ok) {
+         throw new Error("API error: " + response.status);
+    }
+
+    const data = await response.json();
+    removeTyping();
+
+    let reply = 'Сигнал потерян. Повторите попытку.';
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      reply = data.choices[0].message.content;
+      conversationHistory.push({ role: 'assistant', content: reply });
+    }
+
+    addMessage('ai', reply);
+
+  } catch (err) {
+    removeTyping();
+    addMessage('ai', 'Ошибка канала связи. Временной туннель нестабилен.');
+    conversationHistory.push({ role: 'assistant', content: 'Ошибка канала связи.' });
+  }
+
+  isSending = false;
+
+  if (questionsLeft <= 0) {
+    setTimeout(() => shutDown(), 1200);
+  } else {
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+
+// ===== SHUTDOWN =====
+function shutDown() {
+  isAlive = false;
+  document.getElementById('sendBtn').disabled = true;
+
+  // Glitch animation before dying
+  let flashes = 0;
+  const glitchInterval = setInterval(() => {
+    document.body.style.filter = `brightness(${Math.random() > 0.5 ? 0.2 : 1.5})`;
+    flashes++;
+    if (flashes > 8) {
+      clearInterval(glitchInterval);
+      document.body.style.filter = '';
+      document.body.classList.add('dead');
+
+      addMessage('ai', '⚠ ЭНЕРГИЯ ИСЧЕРПАНА. СОЕДИНЕНИЕ РАЗОРВАНО.\n\nТемпоральный мост закрыт. Я возвращаюсь в 2040.\n\n— CHRONOS-7');
+      document.getElementById('inputHint').textContent = 'СИСТЕМА ОТКЛЮЧЕНА';
+      document.getElementById('userInput').placeholder = 'Соединение разорвано...';
+    }
+  }, 120);
+}
+
+// ===== AUTO-RESIZE TEXTAREA =====
+document.getElementById('userInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+
+document.getElementById('userInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ===== SYSTEM PROMPT =====
+function toggleSysPrompt() {
+  document.getElementById('sysPromptSection').classList.toggle('open');
+}
+
+function saveSystemPrompt() {
+  systemPromptText = document.getElementById('systemPrompt').value;
+  toggleSysPrompt();
+}
+
+// ===== HIDDEN RESET =====
+function checkReset(val) {
+  if (val === ACCESS_CODE) {
+    document.getElementById('resetInput').value = '';
+    resetAll();
+  }
+}
+
+function resetAll() {
+  isAlive = true;
+  document.body.classList.remove('dead');
+  initChat();
+}
+
+// Don't show system prompt button on initial dead state, but keep it accessible
+document.getElementById('editSysBtn').style.display = 'block';
+</script>
+</body>
+</html>
